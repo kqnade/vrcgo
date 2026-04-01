@@ -2,6 +2,44 @@ package shared
 
 import "encoding/json"
 
+// NotificationDetails は VRChat API が details フィールドをオブジェクトまたは
+// 文字列で返す場合があるため、両方を受け入れるカスタム型。
+type NotificationDetails map[string]interface{}
+
+// UnmarshalJSON は JSON 文字列とオブジェクトの両方を受け入れる。
+// API が "" や "{}" のような文字列を返す場合は空マップとして扱う。
+func (d *NotificationDetails) UnmarshalJSON(data []byte) error {
+	// オブジェクト形式 {} の場合
+	if len(data) > 0 && data[0] == '{' {
+		var m map[string]interface{}
+		if err := json.Unmarshal(data, &m); err != nil {
+			return err
+		}
+		*d = m
+		return nil
+	}
+	// 文字列形式 "..." の場合: 文字列の中身が JSON オブジェクトなら再パース、
+	// そうでなければ空マップとして扱う。
+	if len(data) > 0 && data[0] == '"' {
+		var s string
+		if err := json.Unmarshal(data, &s); err != nil {
+			return err
+		}
+		if len(s) > 0 && s[0] == '{' {
+			var m map[string]interface{}
+			if err := json.Unmarshal([]byte(s), &m); err == nil {
+				*d = m
+				return nil
+			}
+		}
+		*d = NotificationDetails{}
+		return nil
+	}
+	// null など
+	*d = NotificationDetails{}
+	return nil
+}
+
 // AuthConfig は認証設定です
 type AuthConfig struct {
 	Username string
@@ -308,7 +346,7 @@ type Notification struct {
 	SenderUsername string                 `json:"senderUsername"`
 	ReceiverUserID string                 `json:"receiverUserId"`
 	Message        string                 `json:"message"`
-	Details        map[string]interface{} `json:"details"`
+	Details        NotificationDetails    `json:"details"`
 	Seen           bool                   `json:"seen"`
 	CreatedAt      string                 `json:"created_at"`
 }
